@@ -2,7 +2,7 @@
 
 // 默认配置参数（可修改）
 const DEFAULT_CONFIG = {
-  // 目标域名（实际服务器的域名，如 *.mydomain.com）- 如有环境变量会被覆盖
+  // 默认目标域名（实际服务器的域名，如 *.mydomain.com）- 仅在找不到子域名映射时使用
   TARGET_DOMAIN: 'your.target.domain',
   
   // 是否使用HTTPS协议访问目标域名
@@ -48,6 +48,17 @@ addEventListener('fetch', event => {
 });
 
 /**
+ * 获取子域名映射的目标域名
+ * @param {string} subdomain - 子域名前缀
+ * @returns {string|null} - 目标域名，如果不存在则返回null
+ */
+function getTargetForSubdomain(subdomain) {
+  // 直接从环境变量中查找对应的子域名映射
+  // 例如: blog子域名可以通过名为"blog"的环境变量获取目标域名
+  return typeof self[subdomain] !== 'undefined' ? self[subdomain] : null;
+}
+
+/**
  * 处理请求的主函数
  * @param {Request} request - 原始请求
  * @returns {Promise<Response>} - 代理后的响应
@@ -72,12 +83,20 @@ async function handleRequest(request) {
   // 从请求中获取代理域名（移除子域名部分）
   const proxyDomain = hostname.substring(subdomain.length + 1);
   
+  // 尝试获取此子域名的目标域名映射
+  let targetDomain = getTargetForSubdomain(subdomain);
+  
+  // 如果没有找到映射，则使用默认目标域名
+  if (!targetDomain) {
+    targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
+  }
+  
   // 构建目标URL
   const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
-  const targetUrl = `${protocol}://${subdomain}.${CONFIG.TARGET_DOMAIN}${pathname}${url.search}`;
+  const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
   
   // 转发请求
-  return await proxyRequest(request, targetUrl, subdomain, proxyDomain, CONFIG);
+  return await proxyRequest(request, targetUrl, subdomain, proxyDomain, targetDomain, CONFIG);
 }
 
 /**
@@ -86,10 +105,11 @@ async function handleRequest(request) {
  * @param {string} targetUrl - 目标URL
  * @param {string} subdomain - 子域名前缀
  * @param {string} proxyDomain - 代理域名（从请求中获取）
+ * @param {string} targetDomain - 目标域名
  * @param {Object} config - 当前配置
  * @returns {Promise<Response>} - 修改后的响应
  */
-async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, config) {
+async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, targetDomain, config) {
   // 复制原始请求头
   const requestHeaders = new Headers(originalRequest.headers);
   
@@ -118,8 +138,11 @@ async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, 
       // 获取响应文本
       let text = await response.text();
       
+      // 提取目标主机名用于替换
+      const targetHost = new URL(targetUrl).hostname;
+      
       // 执行内容替换：将目标域名替换为代理域名
-      const sourcePattern = new RegExp(`${subdomain}\\.${config.TARGET_DOMAIN.replace(/\./g, '\\.')}`, 'g');
+      const sourcePattern = new RegExp(targetHost.replace(/\./g, '\\.'), 'g');
       text = text.replace(sourcePattern, `${subdomain}.${proxyDomain}`);
       
       // 返回修改后的响应
