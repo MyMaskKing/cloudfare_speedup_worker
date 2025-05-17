@@ -225,8 +225,11 @@ async function handleRequest(request) {
   const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
   
-  // 检查是否为OAuth相关回调
-  if (['sso_callback', 'oauth', 'callback'].some(key => pathname.includes(key))) {
+  // 检查是否为OAuth/SSO相关回调
+  if (
+    ['sso_callback', 'oauth', 'callback'].some(key => pathname.includes(key)) ||
+    (pathname.includes('/api/auth/sso'))
+  ) {
     const html = renderOAuthHintPage(`${protocol}://${targetDomain}`);
     return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
   }
