@@ -101,7 +101,7 @@ function renderOAuthHintPage(targetUrl) {
           border-radius: 16px;
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
           backdrop-filter: blur(10px);
-          max-width: 520px;
+          max-width: 580px;
           width: 100%;
           padding: 2.5em;
           animation: fadeIn 0.6s ease-out;
@@ -131,6 +131,27 @@ function renderOAuthHintPage(targetUrl) {
           font-size: 1.1em;
         }
         
+        .steps {
+          background: rgba(74, 144, 226, 0.05);
+          border-radius: 12px;
+          padding: 1.5em;
+          margin: 1.5em 0;
+        }
+        
+        .steps ol {
+          margin: 0;
+          padding-left: 1.2em;
+        }
+        
+        .steps li {
+          margin-bottom: 0.8em;
+          color: #34495E;
+        }
+        
+        .steps li:last-child {
+          margin-bottom: 0;
+        }
+        
         .btn {
           display: inline-block;
           background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
@@ -143,6 +164,7 @@ function renderOAuthHintPage(targetUrl) {
           transition: all 0.3s ease;
           text-align: center;
           width: 100%;
+          cursor: pointer;
         }
         
         .btn:hover {
@@ -178,9 +200,20 @@ function renderOAuthHintPage(targetUrl) {
         </svg>
         <h2>请使用原服务器地址进行认证</h2>
         <p>当前页面为代理环境，为确保您的账号安全，OAuth 认证流程需要在原服务器地址下完成。</p>
-        <a href="${targetUrl}" class="btn">前往原服务器进行认证</a>
+        
+        <div class="steps">
+          <ol>
+            <li>点击下方按钮将在<strong>新窗口</strong>打开 原服务器 页面</li>
+            <li>原服务器页面 完成认证后，将会自动注册<strong>本网站的账户</strong>，请手动修改本网站账户的<strong>密码</strong></li>
+            <li>修改完成后可以<strong>关闭本窗口</strong>，<strong>使用账户密码</strong>即可进入代理环境的系统</li>
+          </ol>
+        </div>
+        
+        <a href="${targetUrl}" class="btn" target="_blank">前往原服务器进行认证</a>
+        
         <div class="tip">
-          <p style="margin: 0; font-size: 0.95em;">💡 提示：如因网络原因访问原服务器较慢，可使用 VPN 加速访问，但认证过程必须在原服务器完成以确保安全性。</p>
+          <p style="margin: 0; font-size: 0.95em;">💡 提示：访问原服务器页面时，如遇网络问题，可使用 VPN 加速访问。</p>
+          <p style="margin: 0; font-size: 0.95em;">⭐ 代理环境和原服务器区别：使用相同的账户密码(指的是网站的账户密码，非OAuth认证的账户密码)，代理环境页面因安全因素，无法进行OAuth认证。</p>
         </div>
       </div>
     </body>
