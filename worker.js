@@ -204,7 +204,7 @@ function renderOAuthHintPage(targetUrl) {
         <div class="steps">
           <ol>
             <li>点击下方按钮将在<strong>新窗口</strong>打开 原服务器 页面</li>
-            <li>原服务器页面 完成认证后，将会自动注册<strong>本网站的账户</strong>，请手动修改本网站账户的<strong>密码</strong></li>
+            <li>原服务器页面 完成认证后，将会自动注册<strong>本网站的账户</strong>，请手动修改本网站<strong>账户及密码</strong></li>
             <li>修改完成后可以<strong>关闭本窗口</strong>，<strong>使用账户密码</strong>即可进入代理环境的系统</li>
           </ol>
         </div>
@@ -213,7 +213,7 @@ function renderOAuthHintPage(targetUrl) {
         
         <div class="tip">
           <p style="margin: 0; font-size: 0.95em;">💡 提示：访问原服务器页面时，如遇网络问题，可使用 VPN 加速访问。</p>
-          <p style="margin: 0; font-size: 0.95em;">⭐ 代理环境和原服务器区别：使用相同的账户密码(指的是网站的账户密码，非OAuth认证的账户密码)，代理环境页面因安全因素，无法进行OAuth认证。</p>
+          <p style="margin: 0; font-size: 0.95em;">⭐ 代理环境和原服务器区别：使用相同的账户密码(指的是网站的账户密码，非OAuth认证的账户密码)，代理环境因安全因素，无法进行OAuth认证。</p>
         </div>
       </div>
     </body>
