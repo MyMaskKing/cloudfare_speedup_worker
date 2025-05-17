@@ -128,23 +128,39 @@ async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, 
     // 复制响应头
     const responseHeaders = new Headers(response.headers);
     
+    // 1. 自动处理CSP，允许CDN图片
+    let csp = responseHeaders.get('content-security-policy');
+    if (csp) {
+      csp = csp.replace(
+        /img-src([^;]*);?/,
+        (match, p1) => {
+          return `img-src${p1} https://jsd.nn.ci https://cdn.jsdelivr.net;`;
+        }
+      );
+      responseHeaders.set('content-security-policy', csp);
+    } else {
+      responseHeaders.set(
+        'content-security-policy',
+        "img-src 'self' data: blob: https://jsd.nn.ci https://cdn.jsdelivr.net;"
+      );
+    }
+
+    // 2. 保证set-cookie头完整
+    if (response.headers.has('set-cookie')) {
+      responseHeaders.set('set-cookie', response.headers.get('set-cookie'));
+    }
+
     // 处理内容类型
     const contentType = responseHeaders.get('content-type') || '';
-    
-    // 检查是否需要处理响应内容
     const shouldReplaceContent = config.CONTENT_TYPES_TO_REPLACE.some(type => contentType.includes(type));
-    
     if (shouldReplaceContent) {
       // 获取响应文本
       let text = await response.text();
-      
       // 提取目标主机名用于替换
       const targetHost = new URL(targetUrl).hostname;
-      
       // 执行内容替换：将目标域名替换为代理域名
       const sourcePattern = new RegExp(targetHost.replace(/\./g, '\\.'), 'g');
       text = text.replace(sourcePattern, `${subdomain}.${proxyDomain}`);
-      
       // 返回修改后的响应
       return new Response(text, {
         status: response.status,
@@ -152,9 +168,12 @@ async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, 
         headers: responseHeaders
       });
     }
-    
     // 对于其他类型的内容，直接返回
-    return response;
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders
+    });
   } catch (error) {
     // 处理错误
     return new Response(config.ERROR_MESSAGES.PROXY_FAILED + error.message, { status: 500 });
