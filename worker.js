@@ -58,8 +58,138 @@ function getTargetForSubdomain(subdomain) {
   return typeof self[subdomain] !== 'undefined' ? self[subdomain] : null;
 }
 
+// 生成OAuth提示页面
+function renderOAuthHintPage(targetUrl) {
+  return `
+    <!DOCTYPE html>
+    <html lang="zh-CN">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>认证提示</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes pulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+          100% { transform: scale(1); }
+        }
+        
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2em;
+          line-height: 1.6;
+        }
+        
+        .box {
+          background: rgba(255, 255, 255, 0.95);
+          border-radius: 16px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+          backdrop-filter: blur(10px);
+          max-width: 520px;
+          width: 100%;
+          padding: 2.5em;
+          animation: fadeIn 0.6s ease-out;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .icon {
+          width: 64px;
+          height: 64px;
+          margin: 0 auto 1.5em;
+          display: block;
+          color: #4A90E2;
+          animation: pulse 2s infinite ease-in-out;
+        }
+        
+        h2 {
+          color: #2C3E50;
+          font-size: 1.75em;
+          margin-bottom: 1em;
+          text-align: center;
+          font-weight: 600;
+        }
+        
+        p {
+          color: #34495E;
+          margin-bottom: 1.2em;
+          font-size: 1.1em;
+        }
+        
+        .btn {
+          display: inline-block;
+          background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+          color: white;
+          text-decoration: none;
+          padding: 0.8em 2em;
+          border-radius: 8px;
+          font-weight: 500;
+          margin: 1em 0;
+          transition: all 0.3s ease;
+          text-align: center;
+          width: 100%;
+        }
+        
+        .btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 5px 15px rgba(74, 144, 226, 0.3);
+        }
+        
+        .tip {
+          font-size: 0.95em;
+          color: #7f8c8d;
+          background: rgba(0, 0, 0, 0.03);
+          padding: 1em;
+          border-radius: 8px;
+          margin-top: 1.5em;
+        }
+        
+        @media (max-width: 480px) {
+          .box {
+            padding: 2em;
+          }
+          h2 {
+            font-size: 1.5em;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="box">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <h2>请使用原服务器地址进行认证</h2>
+        <p>当前页面为代理环境，为确保您的账号安全，OAuth 认证流程需要在原服务器地址下完成。</p>
+        <a href="${targetUrl}" class="btn">前往原服务器进行认证</a>
+        <div class="tip">
+          <p style="margin: 0; font-size: 0.95em;">💡 提示：如因网络原因访问原服务器较慢，可使用 VPN 加速访问，但认证过程必须在原服务器完成以确保安全性。</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 /**
- * 处理请求的主函数 
+ * 处理请求的主函数
  * @param {Request} request - 原始请求
  * @returns {Promise<Response>} - 代理后的响应
  */
@@ -94,6 +224,12 @@ async function handleRequest(request) {
   // 构建目标URL
   const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
+  
+  // 检查是否为OAuth相关回调
+  if (['sso_callback', 'oauth', 'callback'].some(key => pathname.includes(key))) {
+    const html = renderOAuthHintPage(`${protocol}://${targetDomain}`);
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+  }
   
   // 转发请求
   return await proxyRequest(request, targetUrl, subdomain, proxyDomain, targetDomain, CONFIG);
