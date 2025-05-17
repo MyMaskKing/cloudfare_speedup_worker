@@ -59,7 +59,7 @@ function getTargetForSubdomain(subdomain) {
 }
 
 /**
- * 处理请求的主函数
+ * 处理请求的主函数 
  * @param {Request} request - 原始请求
  * @returns {Promise<Response>} - 代理后的响应
  */
