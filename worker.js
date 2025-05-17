@@ -112,71 +112,86 @@ async function handleRequest(request) {
 async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, targetDomain, config) {
   // 复制原始请求头
   const requestHeaders = new Headers(originalRequest.headers);
-  
+
+  // Host 头修正
+  requestHeaders.set('Host', new URL(targetUrl).host);
+
+  // 保证 Origin/Referer 头指向目标域名
+  if (requestHeaders.has('Origin')) {
+    try {
+      const originUrl = new URL(requestHeaders.get('Origin'));
+      originUrl.host = new URL(targetUrl).host;
+      requestHeaders.set('Origin', originUrl.toString());
+    } catch {}
+  }
+  if (requestHeaders.has('Referer')) {
+    try {
+      const refererUrl = new URL(requestHeaders.get('Referer'));
+      refererUrl.host = new URL(targetUrl).host;
+      requestHeaders.set('Referer', refererUrl.toString());
+    } catch {}
+  }
+
   // 创建新的请求
   const modifiedRequest = new Request(targetUrl, {
     method: originalRequest.method,
     headers: requestHeaders,
     body: originalRequest.body,
-    redirect: 'follow'
+    redirect: 'manual' // 让 Worker 处理重定向
   });
 
   try {
-    // 获取目标服务器的响应
     let response = await fetch(modifiedRequest);
-    
-    // 复制响应头
     const responseHeaders = new Headers(response.headers);
-    
-    // 1. 自动处理CSP，允许CDN图片
-    let csp = responseHeaders.get('content-security-policy');
-    if (csp) {
-      csp = csp.replace(
-        /img-src([^;]*);?/,
-        (match, p1) => {
-          return `img-src${p1} https://jsd.nn.ci https://cdn.jsdelivr.net;`;
-        }
-      );
-      responseHeaders.set('content-security-policy', csp);
-    } else {
-      responseHeaders.set(
-        'content-security-policy',
-        "img-src 'self' data: blob: https://jsd.nn.ci https://cdn.jsdelivr.net;"
-      );
-    }
 
-    
-    // 2. 保证set-cookie头完整
+    // 多 Set-Cookie 头处理
     if (response.headers.has('set-cookie')) {
-      responseHeaders.set('set-cookie', response.headers.get('set-cookie'));
+      // getAll 兼容性处理
+      let cookies = [];
+      if (typeof response.headers.getAll === 'function') {
+        cookies = response.headers.getAll('set-cookie');
+      } else {
+        // 兼容旧环境
+        const raw = response.headers.get('set-cookie');
+        if (raw) cookies = [raw];
+      }
+      cookies.forEach(cookie => responseHeaders.append('set-cookie', cookie));
     }
 
-    // 处理内容类型
+    // 处理重定向
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      let location = responseHeaders.get('Location');
+      if (location && location.includes(targetDomain)) {
+        location = location.replace(targetDomain, `${subdomain}.${proxyDomain}`);
+        responseHeaders.set('Location', location);
+      }
+    }
+
+    // CORS 支持
+    responseHeaders.set('Access-Control-Allow-Origin', '*');
+    responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+
+    // 内容替换逻辑
     const contentType = responseHeaders.get('content-type') || '';
     const shouldReplaceContent = config.CONTENT_TYPES_TO_REPLACE.some(type => contentType.includes(type));
     if (shouldReplaceContent) {
-      // 获取响应文本
       let text = await response.text();
-      // 提取目标主机名用于替换
       const targetHost = new URL(targetUrl).hostname;
-      // 执行内容替换：将目标域名替换为代理域名
       const sourcePattern = new RegExp(targetHost.replace(/\./g, '\\.'), 'g');
       text = text.replace(sourcePattern, `${subdomain}.${proxyDomain}`);
-      // 返回修改后的响应
       return new Response(text, {
         status: response.status,
         statusText: response.statusText,
         headers: responseHeaders
       });
     }
-    // 对于其他类型的内容，直接返回
+    // 其他类型内容直接返回
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
       headers: responseHeaders
     });
   } catch (error) {
-    // 处理错误
     return new Response(config.ERROR_MESSAGES.PROXY_FAILED + error.message, { status: 500 });
   }
 } 
