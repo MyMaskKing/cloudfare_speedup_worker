@@ -145,6 +145,7 @@ async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, 
       );
     }
 
+    
     // 2. 保证set-cookie头完整
     if (response.headers.has('set-cookie')) {
       responseHeaders.set('set-cookie', response.headers.get('set-cookie'));
