@@ -269,13 +269,15 @@ async function handleRequest(request) {
     return fetch(targetUrl, request);
   }
 
-  // 检查是否为OAuth/SSO相关回调
+  // 检查是否为OAuth/SSO相关回调，直接 pass-through
   if (
     ['sso_callback', 'oauth', 'callback'].some(key => pathname.includes(key)) ||
-    (pathname.includes('/api/auth/sso'))
+    pathname.includes('/api/auth/sso')
   ) {
-    const html = renderOAuthHintPage(`${protocol}://${targetDomain}`);
-    return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    // const html = renderOAuthHintPage(`${protocol}://${targetDomain}`);
+    // return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    // 直接转发 OAuth/SSO，不做内容替换和自定义页面
+    return fetch(targetUrl, request);
   }
 
   // 其余 HTTP 请求走原有反代逻辑
