@@ -72,8 +72,23 @@ async function handleRequest(request) {
   const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
 
-  
-  // 直接转发 OAuth/SSO，不做内容替换和自定义页面
-  return fetch(targetUrl, request);
-  
+  // 修正 Origin 头为目标域名和协议
+  const requestHeaders = new Headers(request.headers);
+  if (requestHeaders.has('Origin')) {
+    try {
+      const originUrl = new URL(requestHeaders.get('Origin'));
+      originUrl.protocol = protocol + ':';
+      originUrl.host = targetDomain;
+      requestHeaders.set('Origin', originUrl.toString());
+    } catch {}
+  }
+
+  // 直接转发，不做内容替换和自定义页面
+  const modifiedRequest = new Request(targetUrl, {
+    method: request.method,
+    headers: requestHeaders,
+    body: request.body,
+    redirect: 'manual'
+  });
+  return fetch(modifiedRequest);
 }
