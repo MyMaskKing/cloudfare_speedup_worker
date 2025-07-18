@@ -10,10 +10,10 @@ const DEFAULT_CONFIG = {
   
   // 需要进行内容替换的内容类型
   CONTENT_TYPES_TO_REPLACE: [
-    'text/html',
-    'text/css',
-    'application/javascript',
-    'application/json'
+    'text/html'
+    // 'text/css',
+    // 'application/javascript',
+    // 'application/json'
   ],
   
   // 错误消息
