@@ -83,6 +83,17 @@ async function handleRequest(request) {
       requestHeaders.set('Origin', originUrl.protocol + '//' + originUrl.host);
     } catch {}
   }
+  // 修正 Host 头为目标域名
+  requestHeaders.set('Host', targetDomain);
+  // 修正 Referer 头（如存在），协议和主机同步为目标域名
+  if (requestHeaders.has('Referer')) {
+    try {
+      const refererUrl = new URL(requestHeaders.get('Referer'));
+      refererUrl.protocol = protocol + ':';
+      refererUrl.host = targetDomain;
+      requestHeaders.set('Referer', refererUrl.toString());
+    } catch {}
+  }
 
   // 直接转发，不做内容替换和自定义页面
   const modifiedRequest = new Request(targetUrl, {
