@@ -11,9 +11,6 @@ const DEFAULT_CONFIG = {
   // 需要进行内容替换的内容类型
   CONTENT_TYPES_TO_REPLACE: [
     'text/html'
-    // 'text/css',
-    // 'application/javascript',
-    // 'application/json'
   ],
   
   // 错误消息
@@ -31,12 +28,6 @@ function getConfig() {
   // 如果环境变量中有设置目标域名，则使用环境变量的值
   if (typeof TARGET_DOMAIN !== 'undefined') {
     config.TARGET_DOMAIN = TARGET_DOMAIN;
-  }
-  
-  // 如果环境变量中有设置是否使用HTTPS，则使用环境变量的值
-  if (typeof USE_HTTPS !== 'undefined') {
-    // 将字符串"false"转换为布尔值false
-    config.USE_HTTPS = USE_HTTPS === "false" ? false : Boolean(USE_HTTPS);
   }
   
   return config;
@@ -76,8 +67,6 @@ async function handleRequest(request) {
   if (!subdomain) {
     return new Response(CONFIG.ERROR_MESSAGES.INVALID_SUBDOMAIN, { status: 400 });
   }
-  // 从请求中获取代理域名（移除子域名部分）
-  const proxyDomain = hostname.substring(subdomain.length + 1);
   // 尝试获取此子域名的目标域名映射
   let targetDomain = getTargetForSubdomain(subdomain);
   // 如果没有找到映射，则使用默认目标域名
@@ -88,131 +77,8 @@ async function handleRequest(request) {
   const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
 
-  // 检查是否为 WebSocket 协议升级请求，直接 pass-through
-  if (
-    request.headers.get('upgrade') &&
-    request.headers.get('upgrade').toLowerCase() === 'websocket'
-  ) {
-    // 直接转发 WebSocket，不做内容替换和头部处理
-    return fetch(targetUrl, request);
-  }
-
-  // 检查是否为 Server-Sent Events (SSE) 请求，直接 pass-through
-  if (
-    request.headers.get('accept') &&
-    request.headers.get('accept').includes('text/event-stream')
-  ) {
-    // 直接转发 SSE，不做内容替换和头部处理
-    return fetch(targetUrl, request);
-  }
-
-  // 检查是否为OAuth/SSO相关回调，直接 pass-through
-  if (
-    ['sso_callback', 'oauth', 'callback'].some(key => pathname.includes(key)) ||
-    pathname.includes('/api/auth/sso')
-  ) {
-    // 直接转发 OAuth/SSO，不做内容替换和自定义页面
-    return fetch(targetUrl, request);
-  }
-
-  // 其余 HTTP 请求走原有反代逻辑
-  return await proxyRequest(request, targetUrl, subdomain, proxyDomain, targetDomain, CONFIG);
+  
+  // 直接转发 OAuth/SSO，不做内容替换和自定义页面
+  return fetch(targetUrl, request);
+  
 }
-
-/**
- * 代理请求到目标服务器
- * @param {Request} originalRequest - 原始请求
- * @param {string} targetUrl - 目标URL
- * @param {string} subdomain - 子域名前缀
- * @param {string} proxyDomain - 代理域名（从请求中获取）
- * @param {string} targetDomain - 目标域名
- * @param {Object} config - 当前配置
- * @returns {Promise<Response>} - 修改后的响应
- */
-async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, targetDomain, config) {
-  // 复制原始请求头
-  const requestHeaders = new Headers(originalRequest.headers);
-
-  // Host 头修正
-  requestHeaders.set('Host', new URL(targetUrl).host);
-
-  // 保证 Origin/Referer 头指向目标域名
-  if (requestHeaders.has('Origin')) {
-    try {
-      const originUrl = new URL(requestHeaders.get('Origin'));
-      originUrl.host = new URL(targetUrl).host;
-      requestHeaders.set('Origin', originUrl.toString());
-    } catch {}
-  }
-  if (requestHeaders.has('Referer')) {
-    try {
-      const refererUrl = new URL(requestHeaders.get('Referer'));
-      refererUrl.host = new URL(targetUrl).host;
-      requestHeaders.set('Referer', refererUrl.toString());
-    } catch {}
-  }
-
-  // 创建新的请求
-  const modifiedRequest = new Request(targetUrl, {
-    method: originalRequest.method,
-    headers: requestHeaders,
-    body: originalRequest.body,
-    redirect: 'manual' // 让 Worker 处理重定向
-  });
-
-  try {
-    let response = await fetch(modifiedRequest);
-    const responseHeaders = new Headers(response.headers);
-
-    // 多 Set-Cookie 头处理
-    if (response.headers.has('set-cookie')) {
-      let cookies = [];
-      if (typeof response.headers.getAll === 'function') {
-        cookies = response.headers.getAll('set-cookie');
-      } else {
-        const raw = response.headers.get('set-cookie');
-        if (raw) cookies = [raw];
-      }
-      cookies.forEach(cookie => responseHeaders.append('set-cookie', cookie));
-    }
-
-    // 处理重定向
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      let location = responseHeaders.get('Location');
-      if (location && location.includes(targetDomain)) {
-        location = location.replace(targetDomain, `${subdomain}.${proxyDomain}`);
-        responseHeaders.set('Location', location);
-      }
-    }
-
-    // CORS 支持
-    responseHeaders.set('Access-Control-Allow-Origin', '*');
-    responseHeaders.set('Access-Control-Allow-Credentials', 'true');
-
-    // 内容类型判断与内容替换逻辑
-    const contentType = responseHeaders.get('content-type') || '';
-    const shouldReplaceContent = config.CONTENT_TYPES_TO_REPLACE.some(type => contentType.includes(type));
-    // 只在需要替换时才做字符串处理，其余类型直接流式转发
-    if (shouldReplaceContent) {
-      let text = await response.text();
-      const targetHost = new URL(targetUrl).hostname;
-      const sourcePattern = new RegExp(targetHost.replace(/\./g, '\.'), 'g');
-      text = text.replace(sourcePattern, `${subdomain}.${proxyDomain}`);
-      // 替换后必须去掉压缩头
-      responseHeaders.delete('content-encoding');
-      return new Response(text, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: responseHeaders
-      });
-    }
-    // 其他类型内容直接返回（流式转发）
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders
-    });
-  } catch (error) {
-    return new Response(config.ERROR_MESSAGES.PROXY_FAILED + error.message, { status: 500 });
-  }
-} 
