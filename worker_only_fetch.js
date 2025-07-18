@@ -79,7 +79,8 @@ async function handleRequest(request) {
       const originUrl = new URL(requestHeaders.get('Origin'));
       originUrl.protocol = protocol + ':';
       originUrl.host = targetDomain;
-      requestHeaders.set('Origin', originUrl.toString());
+      // 标准 Origin 格式：协议+双斜杠+主机，不带结尾斜杠
+      requestHeaders.set('Origin', originUrl.protocol + '//' + originUrl.host);
     } catch {}
   }
 
