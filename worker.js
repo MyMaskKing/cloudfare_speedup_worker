@@ -260,6 +260,15 @@ async function handleRequest(request) {
     return fetch(targetUrl, request);
   }
 
+  // 检查是否为 Server-Sent Events (SSE) 请求，直接 pass-through
+  if (
+    request.headers.get('accept') &&
+    request.headers.get('accept').includes('text/event-stream')
+  ) {
+    // 直接转发 SSE，不做内容替换和头部处理
+    return fetch(targetUrl, request);
+  }
+
   // 检查是否为OAuth/SSO相关回调
   if (
     ['sso_callback', 'oauth', 'callback'].some(key => pathname.includes(key)) ||
