@@ -318,12 +318,10 @@ async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, 
 
     // 多 Set-Cookie 头处理
     if (response.headers.has('set-cookie')) {
-      // getAll 兼容性处理
       let cookies = [];
       if (typeof response.headers.getAll === 'function') {
         cookies = response.headers.getAll('set-cookie');
       } else {
-        // 兼容旧环境
         const raw = response.headers.get('set-cookie');
         if (raw) cookies = [raw];
       }
@@ -343,21 +341,24 @@ async function proxyRequest(originalRequest, targetUrl, subdomain, proxyDomain, 
     responseHeaders.set('Access-Control-Allow-Origin', '*');
     responseHeaders.set('Access-Control-Allow-Credentials', 'true');
 
-    // 内容替换逻辑
+    // 内容类型判断与内容替换逻辑
     const contentType = responseHeaders.get('content-type') || '';
     const shouldReplaceContent = config.CONTENT_TYPES_TO_REPLACE.some(type => contentType.includes(type));
+    // 只在需要替换时才做字符串处理，其余类型直接流式转发
     if (shouldReplaceContent) {
       let text = await response.text();
       const targetHost = new URL(targetUrl).hostname;
-      const sourcePattern = new RegExp(targetHost.replace(/\./g, '\\.'), 'g');
+      const sourcePattern = new RegExp(targetHost.replace(/\./g, '\.'), 'g');
       text = text.replace(sourcePattern, `${subdomain}.${proxyDomain}`);
+      // 替换后必须去掉压缩头
+      responseHeaders.delete('content-encoding');
       return new Response(text, {
         status: response.status,
         statusText: response.statusText,
         headers: responseHeaders
       });
     }
-    // 其他类型内容直接返回
+    // 其他类型内容直接返回（流式转发）
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
