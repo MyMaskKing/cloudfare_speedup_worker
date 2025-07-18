@@ -7,12 +7,7 @@ const DEFAULT_CONFIG = {
   
   // 是否使用HTTPS协议访问目标域名
   USE_HTTPS: true,
-  
-  // 需要进行内容替换的内容类型
-  CONTENT_TYPES_TO_REPLACE: [
-    'text/html'
-  ],
-  
+
   // 错误消息
   ERROR_MESSAGES: {
     INVALID_SUBDOMAIN: '无效的子域名',
