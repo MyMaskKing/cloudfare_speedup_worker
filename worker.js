@@ -229,35 +229,37 @@ function renderOAuthHintPage(targetUrl) {
 async function handleRequest(request) {
   // 获取当前配置（结合环境变量）
   const CONFIG = getConfig();
-  
   const url = new URL(request.url);
   const hostname = url.hostname;
   const pathname = url.pathname;
-  
   // 提取子域名前缀和代理主域名
   const hostnameParts = hostname.split('.');
   const subdomain = hostnameParts[0];
-  
   // 确保有有效的子域名
   if (!subdomain) {
     return new Response(CONFIG.ERROR_MESSAGES.INVALID_SUBDOMAIN, { status: 400 });
   }
-  
   // 从请求中获取代理域名（移除子域名部分）
   const proxyDomain = hostname.substring(subdomain.length + 1);
-  
   // 尝试获取此子域名的目标域名映射
   let targetDomain = getTargetForSubdomain(subdomain);
-  
   // 如果没有找到映射，则使用默认目标域名
   if (!targetDomain) {
     targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
   }
-  
   // 构建目标URL
   const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
-  
+
+  // 检查是否为 WebSocket 协议升级请求，直接 pass-through
+  if (
+    request.headers.get('upgrade') &&
+    request.headers.get('upgrade').toLowerCase() === 'websocket'
+  ) {
+    // 直接转发 WebSocket，不做内容替换和头部处理
+    return fetch(targetUrl, request);
+  }
+
   // 检查是否为OAuth/SSO相关回调
   if (
     ['sso_callback', 'oauth', 'callback'].some(key => pathname.includes(key)) ||
@@ -266,8 +268,8 @@ async function handleRequest(request) {
     const html = renderOAuthHintPage(`${protocol}://${targetDomain}`);
     return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
   }
-  
-  // 转发请求
+
+  // 其余 HTTP 请求走原有反代逻辑
   return await proxyRequest(request, targetUrl, subdomain, proxyDomain, targetDomain, CONFIG);
 }
 
