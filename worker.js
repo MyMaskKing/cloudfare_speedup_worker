@@ -102,5 +102,29 @@ async function handleRequest(request) {
     body: request.body,
     redirect: 'manual'
   });
-  return fetch(modifiedRequest);
+
+  // 代理请求
+  const response = await fetch(modifiedRequest);
+
+  // 处理重定向Location头，保证用户始终看到自己的域名
+  const responseHeaders = new Headers(response.headers);
+  if (responseHeaders.has('Location')) {
+    const location = responseHeaders.get('Location');
+    try {
+      const locationUrl = new URL(location, targetUrl);
+      // 如果Location指向目标服务器域名，则替换为当前请求域名
+      if (locationUrl.hostname === targetDomain) {
+        locationUrl.hostname = hostname;
+        responseHeaders.set('Location', locationUrl.toString());
+      }
+    } catch {
+      // 如果Location不是合法URL，忽略
+    }
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders
+  });
 }
