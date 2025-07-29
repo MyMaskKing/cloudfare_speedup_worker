@@ -95,6 +95,16 @@ async function handleRequest(request) {
     } catch {}
   }
 
+  // === 插入 WebSocket 升级代理 ===
+  if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+    const wsRequest = new Request(targetUrl, {
+      method: request.method,
+      headers: requestHeaders,
+      body: request.body
+    });
+    return await fetch(wsRequest);
+  }
+
   // 直接转发，不做内容替换和自定义页面
   const modifiedRequest = new Request(targetUrl, {
     method: request.method,
