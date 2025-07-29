@@ -95,15 +95,37 @@ async function handleRequest(request) {
     } catch {}
   }
 
-  // === 插入 WebSocket 升级代理 ===
+  // === WebSocket 升级代理处理 ===
   if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-    const wsRequest = new Request(targetUrl, {
+    const wsPair = new WebSocketPair();
+    const [client, server] = Object.values(wsPair);
+    // 接受客户端连接
+    server.accept();
+
+    // 转发原始 WebSocket 升级请求到目标服务器
+    const upstreamResponse = await fetch(targetUrl, {
       method: request.method,
       headers: requestHeaders,
-      body: request.body
+      body: request.body,
     });
-    return await fetch(wsRequest);
+
+    if (!upstreamResponse.webSocket) {
+      return new Response('Upstream did not return a webSocket', { status: 502 });
+    }
+
+    const upstreamSocket = upstreamResponse.webSocket;
+    upstreamSocket.accept();
+
+    // 双向消息转发
+    server.addEventListener('message', ev => client.send(ev.data));
+    client.addEventListener('message', ev => upstreamSocket.send(ev.data));
+
+    return new Response(null, {
+      status: 101,
+      webSocket: client
+    });
   }
+// === WebSocket 分支结束 ===
 
   // 直接转发，不做内容替换和自定义页面
   const modifiedRequest = new Request(targetUrl, {
