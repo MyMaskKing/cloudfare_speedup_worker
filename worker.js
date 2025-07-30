@@ -97,33 +97,100 @@ async function handleRequest(request) {
 
   // === WebSocket 升级代理处理 ===
   if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-    const wsPair = new WebSocketPair();
-    const [client, server] = Object.values(wsPair);
-    // 接受客户端连接
-    server.accept();
+    try {
+      // 创建WebSocket对
+      const wsPair = new WebSocketPair();
+      const [client, server] = Object.values(wsPair);
+      
+      // 接受客户端连接
+      server.accept();
 
-    // 转发原始 WebSocket 升级请求到目标服务器
-    const upstreamResponse = await fetch(targetUrl, {
-      method: request.method,
-      headers: requestHeaders,
-      body: request.body,
-    });
+      // 使用fetch建立到上游服务器的WebSocket连接
+      const upstreamResponse = await fetch(targetUrl, {
+        method: request.method,
+        headers: requestHeaders,
+        body: request.body,
+      });
 
-    if (!upstreamResponse.webSocket) {
-      return new Response('Upstream did not return a webSocket', { status: 502 });
+      if (!upstreamResponse.webSocket) {
+        server.close(1011, 'Upstream server does not support WebSocket');
+        return new Response('Upstream server does not support WebSocket', { status: 502 });
+      }
+
+      const upstreamSocket = upstreamResponse.webSocket;
+      upstreamSocket.accept();
+
+      // 双向消息转发
+      server.addEventListener('message', ev => {
+        try {
+          if (upstreamSocket.readyState === WebSocket.READY_STATE_OPEN) {
+            upstreamSocket.send(ev.data);
+          }
+        } catch (error) {
+          console.error('Error forwarding message to upstream:', error);
+          server.close(1011, 'Error forwarding to upstream');
+        }
+      });
+
+      upstreamSocket.addEventListener('message', ev => {
+        try {
+          if (server.readyState === WebSocket.READY_STATE_OPEN) {
+            server.send(ev.data);
+          }
+        } catch (error) {
+          console.error('Error forwarding message to client:', error);
+          upstreamSocket.close(1011, 'Error forwarding to client');
+        }
+      });
+
+      // 处理连接关闭
+      server.addEventListener('close', (event) => {
+        try {
+          if (upstreamSocket.readyState === WebSocket.READY_STATE_OPEN) {
+            upstreamSocket.close(event.code, event.reason);
+          }
+        } catch (error) {
+          console.error('Error closing upstream connection:', error);
+        }
+      });
+
+      upstreamSocket.addEventListener('close', (event) => {
+        try {
+          if (server.readyState === WebSocket.READY_STATE_OPEN) {
+            server.close(event.code, event.reason);
+          }
+        } catch (error) {
+          console.error('Error closing client connection:', error);
+        }
+      });
+
+      // 处理错误
+      server.addEventListener('error', (error) => {
+        console.error('Client WebSocket error:', error);
+        try {
+          if (upstreamSocket.readyState === WebSocket.READY_STATE_OPEN) {
+            upstreamSocket.close(1011, 'Client error');
+          }
+        } catch {}
+      });
+
+      upstreamSocket.addEventListener('error', (error) => {
+        console.error('Upstream WebSocket error:', error);
+        try {
+          if (server.readyState === WebSocket.READY_STATE_OPEN) {
+            server.close(1011, 'Upstream error');
+          }
+        } catch {}
+      });
+
+      return new Response(null, {
+        status: 101,
+        webSocket: client
+      });
+    } catch (error) {
+      console.error('WebSocket proxy error:', error);
+      return new Response('WebSocket proxy failed', { status: 502 });
     }
-
-    const upstreamSocket = upstreamResponse.webSocket;
-    upstreamSocket.accept();
-
-    // 双向消息转发
-    server.addEventListener('message', ev => client.send(ev.data));
-    client.addEventListener('message', ev => upstreamSocket.send(ev.data));
-
-    return new Response(null, {
-      status: 101,
-      webSocket: client
-    });
   }
 // === WebSocket 分支结束 ===
 
