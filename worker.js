@@ -95,94 +95,26 @@ async function handleRequest(request) {
     } catch {}
   }
 
-  // === WebSocket 升级代理处理 ===
+  // === WebSocket 升级代理处理 - 优化部分 ===
   if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
     try {
-      // 创建WebSocket对
-      const wsPair = new WebSocketPair();
-      const [client, server] = Object.values(wsPair);
-      
-      // 接受客户端连接
-      server.accept();
-
-      // 使用fetch建立到上游服务器的WebSocket连接
+      const { 0: client, 1: server } = new WebSocketPair();  
+      // 使用 fetch 建立到上游服务器的 WebSocket 连接
+      // 关键：将 server 端作为参数传递，Cloudflare Worker 将自动处理转发
       const upstreamResponse = await fetch(targetUrl, {
         method: request.method,
         headers: requestHeaders,
         body: request.body,
+        webSocket: server
       });
-
-      if (!upstreamResponse.webSocket) {
-        server.close(1011, 'Upstream server does not support WebSocket');
-        return new Response('Upstream server does not support WebSocket', { status: 502 });
-      }
-
-      const upstreamSocket = upstreamResponse.webSocket;
-      upstreamSocket.accept();
-
-      // 双向消息转发
-      server.addEventListener('message', ev => {
-        try {
-          if (upstreamSocket.readyState === WebSocket.READY_STATE_OPEN) {
-            upstreamSocket.send(ev.data);
-          }
-        } catch (error) {
-          console.error('Error forwarding message to upstream:', error);
-          server.close(1011, 'Error forwarding to upstream');
-        }
-      });
-
-      upstreamSocket.addEventListener('message', ev => {
-        try {
-          if (server.readyState === WebSocket.READY_STATE_OPEN) {
-            server.send(ev.data);
-          }
-        } catch (error) {
-          console.error('Error forwarding message to client:', error);
-          upstreamSocket.close(1011, 'Error forwarding to client');
-        }
-      });
-
-      // 处理连接关闭
-      server.addEventListener('close', (event) => {
-        try {
-          if (upstreamSocket.readyState === WebSocket.READY_STATE_OPEN) {
-            upstreamSocket.close(event.code, event.reason);
-          }
-        } catch (error) {
-          console.error('Error closing upstream connection:', error);
-        }
-      });
-
-      upstreamSocket.addEventListener('close', (event) => {
-        try {
-          if (server.readyState === WebSocket.READY_STATE_OPEN) {
-            server.close(event.code, event.reason);
-          }
-        } catch (error) {
-          console.error('Error closing client connection:', error);
-        }
-      });
-
-      // 处理错误
-      server.addEventListener('error', (error) => {
-        console.error('Client WebSocket error:', error);
-        try {
-          if (upstreamSocket.readyState === WebSocket.READY_STATE_OPEN) {
-            upstreamSocket.close(1011, 'Client error');
-          }
-        } catch {}
-      });
-
-      upstreamSocket.addEventListener('error', (error) => {
-        console.error('Upstream WebSocket error:', error);
-        try {
-          if (server.readyState === WebSocket.READY_STATE_OPEN) {
-            server.close(1011, 'Upstream error');
-          }
-        } catch {}
-      });
-
+  
+      // 如果上游服务器没有返回 101，说明 WebSocket 握手失败
+      if (upstreamResponse.status !== 101) {
+        return upstreamResponse;
+       }
+  
+      // 握手成功，返回一个带有 client 端的 101 响应
+      // Worker 运行时会自动处理 client 和 server 之间的双向通信
       return new Response(null, {
         status: 101,
         webSocket: client
