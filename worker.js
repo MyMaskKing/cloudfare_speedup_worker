@@ -59,6 +59,21 @@ function getTargetForSubdomain(subdomain) {
 }
 
 /**
+ * 添加CORS响应头到Headers对象
+ * @param {Headers} headers - 目标Headers对象
+ * @param {string|null} origin - 请求Origin值
+ */
+function addCorsHeaders(headers, origin) {
+  if (origin) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Credentials', 'true');
+  } else {
+    headers.set('Access-Control-Allow-Origin', '*');
+  }
+  headers.set('Vary', 'Origin');
+}
+
+/**
  * 处理请求的主函数
  * @param {Request} request - 原始请求
  * @returns {Promise<Response>} - 代理后的响应
@@ -112,13 +127,7 @@ async function handleRequest(request) {
   // 如果启用了CORS，处理OPTIONS预检请求
   if (CONFIG.ENABLE_CORS && request.method === 'OPTIONS') {
     const corsHeaders = new Headers();
-    const requestOrigin = request.headers.get('Origin');
-    if (requestOrigin) {
-      corsHeaders.set('Access-Control-Allow-Origin', requestOrigin);
-      corsHeaders.set('Access-Control-Allow-Credentials', 'true');
-    } else {
-      corsHeaders.set('Access-Control-Allow-Origin', '*');
-    }
+    addCorsHeaders(corsHeaders, request.headers.get('Origin'));
     const requestMethod = request.headers.get('Access-Control-Request-Method');
     corsHeaders.set('Access-Control-Allow-Methods', requestMethod || 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     const requestHeadersValue = request.headers.get('Access-Control-Request-Headers');
@@ -221,13 +230,7 @@ async function handleRequest(request) {
 
       const wsResponseHeaders = new Headers();
       if (CONFIG.ENABLE_CORS) {
-        const requestOrigin = request.headers.get('Origin');
-        if (requestOrigin) {
-          wsResponseHeaders.set('Access-Control-Allow-Origin', requestOrigin);
-          wsResponseHeaders.set('Access-Control-Allow-Credentials', 'true');
-        } else {
-          wsResponseHeaders.set('Access-Control-Allow-Origin', '*');
-        }
+        addCorsHeaders(wsResponseHeaders, request.headers.get('Origin'));
       }
       return new Response(null, {
         status: 101,
@@ -283,13 +286,7 @@ async function handleRequest(request) {
 
   // 如果启用了CORS支持，添加CORS响应头
   if (CONFIG.ENABLE_CORS) {
-    const requestOrigin = request.headers.get('Origin');
-    if (requestOrigin) {
-      responseHeaders.set('Access-Control-Allow-Origin', requestOrigin);
-      responseHeaders.set('Access-Control-Allow-Credentials', 'true');
-    } else {
-      responseHeaders.set('Access-Control-Allow-Origin', '*');
-    }
+    addCorsHeaders(responseHeaders, request.headers.get('Origin'));
   }
 
   return new Response(response.body, {
