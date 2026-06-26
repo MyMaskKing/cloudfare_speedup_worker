@@ -237,6 +237,7 @@ async function handleRequest(request) {
 
   // 处理多个 Set-Cookie 头 - Cloudflare Workers 需要特殊处理才能保留多个 cookie
   if (response.headers.has('set-cookie')) {
+    responseHeaders.delete('set-cookie');
     let cookies = [];
     if (typeof response.headers.getAll === 'function') {
       cookies = response.headers.getAll('set-cookie');
