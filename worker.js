@@ -109,6 +109,28 @@ async function handleRequest(request) {
     } catch {}
   }
 
+  // 如果启用了CORS，处理OPTIONS预检请求
+  if (CONFIG.ENABLE_CORS && request.method === 'OPTIONS') {
+    const corsHeaders = new Headers();
+    const requestOrigin = request.headers.get('Origin');
+    if (requestOrigin) {
+      corsHeaders.set('Access-Control-Allow-Origin', requestOrigin);
+      corsHeaders.set('Access-Control-Allow-Credentials', 'true');
+    } else {
+      corsHeaders.set('Access-Control-Allow-Origin', '*');
+    }
+    const requestMethod = request.headers.get('Access-Control-Request-Method');
+    corsHeaders.set('Access-Control-Allow-Methods', requestMethod || 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    const requestHeadersValue = request.headers.get('Access-Control-Request-Headers');
+    if (requestHeadersValue) {
+      corsHeaders.set('Access-Control-Allow-Headers', requestHeadersValue);
+    } else {
+      corsHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    }
+    corsHeaders.set('Access-Control-Max-Age', '86400');
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   // === WebSocket 升级代理处理 ===
   if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
     try {
@@ -197,9 +219,20 @@ async function handleRequest(request) {
         } catch {}
       });
 
+      const wsResponseHeaders = new Headers();
+      if (CONFIG.ENABLE_CORS) {
+        const requestOrigin = request.headers.get('Origin');
+        if (requestOrigin) {
+          wsResponseHeaders.set('Access-Control-Allow-Origin', requestOrigin);
+          wsResponseHeaders.set('Access-Control-Allow-Credentials', 'true');
+        } else {
+          wsResponseHeaders.set('Access-Control-Allow-Origin', '*');
+        }
+      }
       return new Response(null, {
         status: 101,
-        webSocket: client
+        webSocket: client,
+        headers: wsResponseHeaders
       });
     } catch (error) {
       console.error('WebSocket proxy error:', error);
@@ -250,8 +283,13 @@ async function handleRequest(request) {
 
   // 如果启用了CORS支持，添加CORS响应头
   if (CONFIG.ENABLE_CORS) {
-    responseHeaders.set('Access-Control-Allow-Origin', '*');
-    responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+    const requestOrigin = request.headers.get('Origin');
+    if (requestOrigin) {
+      responseHeaders.set('Access-Control-Allow-Origin', requestOrigin);
+      responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+    } else {
+      responseHeaders.set('Access-Control-Allow-Origin', '*');
+    }
   }
 
   return new Response(response.body, {
