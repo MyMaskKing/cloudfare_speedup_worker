@@ -8,6 +8,9 @@ const DEFAULT_CONFIG = {
   // 是否使用HTTPS协议访问目标域名
   USE_HTTPS: true,
 
+  // 是否启用CORS支持（跨域请求）
+  ENABLE_CORS: false,
+
   // 错误消息
   ERROR_MESSAGES: {
     INVALID_SUBDOMAIN: '无效的子域名',
@@ -24,7 +27,18 @@ function getConfig() {
   if (typeof TARGET_DOMAIN !== 'undefined') {
     config.TARGET_DOMAIN = TARGET_DOMAIN;
   }
-  
+
+  // 如果环境变量中有设置是否使用HTTPS，则使用环境变量的值
+  if (typeof USE_HTTPS !== 'undefined') {
+    // 将字符串"false"转换为布尔值false
+    config.USE_HTTPS = USE_HTTPS === "false" ? false : Boolean(USE_HTTPS);
+  }
+
+  // 如果环境变量中有设置是否启用CORS，则使用环境变量的值
+  if (typeof ENABLE_CORS !== 'undefined') {
+    config.ENABLE_CORS = ENABLE_CORS === "false" ? false : Boolean(ENABLE_CORS);
+  }
+
   return config;
 }
 
