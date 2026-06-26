@@ -248,6 +248,12 @@ async function handleRequest(request) {
     cookies.forEach(cookie => responseHeaders.append('set-cookie', cookie));
   }
 
+  // 如果启用了CORS支持，添加CORS响应头
+  if (CONFIG.ENABLE_CORS) {
+    responseHeaders.set('Access-Control-Allow-Origin', '*');
+    responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+  }
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
