@@ -15,4 +15,4 @@ ACCEL_DOMAIN = "cloudflare.182682.xyz"
 # 走加速的子域名列表（逗号分隔），命中则直接转发到 ACCEL_DOMAIN
 ACCEL_SUBDOMAINS = "email"
 # 加速域名是否使用HTTPS（独立于 USE_HTTPS，仅对加速请求生效，默认 true）
-# ACCEL_USE_HTTPS = "false"
+ACCEL_USE_HTTPS = "false"
