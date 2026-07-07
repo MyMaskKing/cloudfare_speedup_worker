@@ -11,15 +11,6 @@ const DEFAULT_CONFIG = {
   // 是否启用CORS支持（跨域请求）
   ENABLE_CORS: false,
 
-  // 加速接入域名（第三方CDN加速域名，替代原来的中转域名B）
-  ACCEL_DOMAIN: '',
-
-  // 走加速的子域名列表（逗号分隔），命中则直接转发到 ACCEL_DOMAIN
-  ACCEL_SUBDOMAINS: [],
-
-  // 加速域名是否使用HTTPS协议（独立于 USE_HTTPS，仅对加速请求生效）
-  ACCEL_USE_HTTPS: true,
-
   // 错误消息
   ERROR_MESSAGES: {
     INVALID_SUBDOMAIN: '无效的子域名',
@@ -48,32 +39,7 @@ function getConfig() {
     config.ENABLE_CORS = ENABLE_CORS === "false" ? false : Boolean(ENABLE_CORS);
   }
 
-  // 加速接入域名
-  if (typeof ACCEL_DOMAIN !== 'undefined') {
-    config.ACCEL_DOMAIN = ACCEL_DOMAIN;
-  }
-
-  // 走加速的子域名列表（逗号分隔字符串 → 去空白数组）
-  if (typeof ACCEL_SUBDOMAINS !== 'undefined') {
-    config.ACCEL_SUBDOMAINS = parseList(ACCEL_SUBDOMAINS);
-  }
-
-  // 加速域名是否使用HTTPS（独立开关）
-  if (typeof ACCEL_USE_HTTPS !== 'undefined') {
-    config.ACCEL_USE_HTTPS = ACCEL_USE_HTTPS === "false" ? false : Boolean(ACCEL_USE_HTTPS);
-  }
-
   return config;
-}
-
-/**
- * 将逗号分隔的字符串解析为去除空白的非空数组
- * @param {string} str - 逗号分隔的字符串
- * @returns {string[]} - 解析后的数组
- */
-function parseList(str) {
-  if (typeof str !== 'string') return [];
-  return str.split(',').map(s => s.trim()).filter(s => s.length > 0);
 }
 
 // 监听所有请求
@@ -126,20 +92,11 @@ async function handleRequest(request) {
     return new Response(CONFIG.ERROR_MESSAGES.INVALID_SUBDOMAIN, { status: 400 });
   }
   // 尝试获取此子域名的目标域名映射
-  let targetDomain;
-  let useHttps;
-  if (CONFIG.ACCEL_DOMAIN && CONFIG.ACCEL_SUBDOMAINS.includes(subdomain)) {
-    // 加速：直接转发到加速接入域名，协议由 ACCEL_USE_HTTPS 单独控制
-    targetDomain = CONFIG.ACCEL_DOMAIN;
-    useHttps = CONFIG.ACCEL_USE_HTTPS;
-  } else {
-    // 旧逻辑：查子域名映射，未找到则回退到默认目标域名
-    targetDomain = getTargetForSubdomain(subdomain);
-    if (!targetDomain) {
-      targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
-    }
-    useHttps = CONFIG.USE_HTTPS;
+  let targetDomain = getTargetForSubdomain(subdomain);
+  if (!targetDomain) {
+    targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
   }
+  const useHttps = CONFIG.USE_HTTPS;
   // 构建目标URL
   const protocol = useHttps ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
