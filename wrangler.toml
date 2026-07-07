@@ -11,8 +11,8 @@ n8n = "mask139-n8n.hf.space"
 
 # === 加速与旁路（可选）===
 # 加速接入域名（第三方CDN加速域名，替代原来的中转域名B）
-# ACCEL_DOMAIN = "cloudflare.182682.xyz"
+ACCEL_DOMAIN = "cloudflare.182682.xyz"
 # 走加速的子域名列表（逗号分隔），命中则直接转发到 ACCEL_DOMAIN
-# ACCEL_SUBDOMAINS = "email"
+ACCEL_SUBDOMAINS = "email"
 # 纯透传的子域名列表（逗号分隔），命中则不改写任何头、原样转发；优先级高于加速
-# BYPASS_SUBDOMAINS = ""
+BYPASS_SUBDOMAINS = ""
