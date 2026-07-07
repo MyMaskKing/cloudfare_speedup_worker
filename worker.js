@@ -17,8 +17,8 @@ const DEFAULT_CONFIG = {
   // 走加速的子域名列表（逗号分隔），命中则直接转发到 ACCEL_DOMAIN
   ACCEL_SUBDOMAINS: [],
 
-  // 纯透传的子域名列表（逗号分隔），命中则不改写任何头、原样转发
-  BYPASS_SUBDOMAINS: [],
+  // 加速域名是否使用HTTPS协议（独立于 USE_HTTPS，仅对加速请求生效）
+  ACCEL_USE_HTTPS: true,
 
   // 错误消息
   ERROR_MESSAGES: {
@@ -58,9 +58,9 @@ function getConfig() {
     config.ACCEL_SUBDOMAINS = parseList(ACCEL_SUBDOMAINS);
   }
 
-  // 纯透传的子域名列表（逗号分隔字符串 → 去空白数组）
-  if (typeof BYPASS_SUBDOMAINS !== 'undefined') {
-    config.BYPASS_SUBDOMAINS = parseList(BYPASS_SUBDOMAINS);
+  // 加速域名是否使用HTTPS（独立开关）
+  if (typeof ACCEL_USE_HTTPS !== 'undefined') {
+    config.ACCEL_USE_HTTPS = ACCEL_USE_HTTPS === "false" ? false : Boolean(ACCEL_USE_HTTPS);
   }
 
   return config;
@@ -126,32 +126,23 @@ async function handleRequest(request) {
     return new Response(CONFIG.ERROR_MESSAGES.INVALID_SUBDOMAIN, { status: 400 });
   }
   // 尝试获取此子域名的目标域名映射
-  // 判断该子域名是否命中旁路白名单（优先级最高）
-  const isBypass = CONFIG.BYPASS_SUBDOMAINS.includes(subdomain);
   let targetDomain;
-  if (!isBypass && CONFIG.ACCEL_DOMAIN && CONFIG.ACCEL_SUBDOMAINS.includes(subdomain)) {
-    // 加速：直接转发到加速接入域名
+  let useHttps;
+  if (CONFIG.ACCEL_DOMAIN && CONFIG.ACCEL_SUBDOMAINS.includes(subdomain)) {
+    // 加速：直接转发到加速接入域名，协议由 ACCEL_USE_HTTPS 单独控制
     targetDomain = CONFIG.ACCEL_DOMAIN;
+    useHttps = CONFIG.ACCEL_USE_HTTPS;
   } else {
     // 旧逻辑：查子域名映射，未找到则回退到默认目标域名
     targetDomain = getTargetForSubdomain(subdomain);
     if (!targetDomain) {
       targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
     }
+    useHttps = CONFIG.USE_HTTPS;
   }
   // 构建目标URL
-  const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
+  const protocol = useHttps ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
-
-  // 旁路透传：命中旁路白名单的子域名，不改写任何头，原样转发并直接返回
-  if (isBypass) {
-    return fetch(new Request(targetUrl, {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      redirect: 'manual'
-    }));
-  }
 
   // 修正 Origin 头为目标域名和协议
   const requestHeaders = new Headers(request.headers);

@@ -8,7 +8,6 @@
 - 通过环境变量轻松配置映射关系
 - 支持 WebSocket 代理与可选的 CORS 跨域
 - 加速模式：特定子域名直接转发到第三方 CDN 加速域名（省掉中转域名）
-- 旁路模式：特定子域名纯透传，不改写任何请求头
 
 ## 快速配置
 
@@ -28,10 +27,10 @@
 - 变量名: `blog` → 变量值: `aaa.blog.com`
 - 变量名: `api` → 变量值: `api-server.example.org`
 
-3. **加速与旁路（可选）**
+3. **加速模式（可选）**
    - `ACCEL_DOMAIN` = 第三方 CDN 加速接入域名（如: `xxx.cdn-provider.com`）
    - `ACCEL_SUBDOMAINS` = 走加速的子域名列表，逗号分隔（如: `cdn,static`）
-   - `BYPASS_SUBDOMAINS` = 纯透传的子域名列表，逗号分隔（如: `raw,direct`）
+   - `ACCEL_USE_HTTPS` = 加速域名是否用 HTTPS（`true`/`false`，默认 `true`；独立于 `USE_HTTPS`，仅对加速请求生效）
 
 ### 部署步骤
 
@@ -63,16 +62,46 @@
 - `www.yourdomain.com` → 代理到 `www.example.com`
 - `api.yourdomain.com` → 代理到 `api.example.com`
 
-## 加速与旁路模式
+## 加速模式
 
-三个可选变量决定子域名的处理方式，**优先级：旁路 > 加速 > 普通映射**：
+加速模式让特定子域名直接转发到第三方 CDN 加速域名，无需再单独购买、维护一个中转域名（域名B）：
 
-- **加速模式**：命中 `ACCEL_SUBDOMAINS` 的子域名会直接转发到 `ACCEL_DOMAIN`，并把 `Host`/`Origin`/`Referer` 改写为加速域名。适合「一个入口域名直连第三方 CDN，无需再单独购买中转域名」的场景。
-  - 例：`ACCEL_DOMAIN=xxx.cdn.com`、`ACCEL_SUBDOMAINS=cdn` → `cdn.yourdomain.com/*` 全部转发到 `xxx.cdn.com`
-- **旁路模式**：命中 `BYPASS_SUBDOMAINS` 的子域名**纯透传**，不改写任何请求头、不处理重定向/Cookie/CORS，原样转发。用于需要保持原始请求头的场景。
-- 三个变量均留空时，行为与普通子域名映射完全一致。
+- 命中 `ACCEL_SUBDOMAINS` 的子域名会直接转发到 `ACCEL_DOMAIN`，并把 `Host`/`Origin`/`Referer` 改写为加速域名
+- 例：`ACCEL_DOMAIN=xxx.cdn.com`、`ACCEL_SUBDOMAINS=cdn` → `cdn.yourdomain.com/*` 全部转发到 `xxx.cdn.com`
+- `ACCEL_DOMAIN` 留空或子域名不在 `ACCEL_SUBDOMAINS` 时，走普通子域名映射逻辑
+- 加速请求的协议由 `ACCEL_USE_HTTPS` 单独控制（默认 `true`），不受全局 `USE_HTTPS` 影响
+
+**优先级**：加速模式 > 普通子域名映射 > 默认规则（`{子域名}.{TARGET_DOMAIN}`）
+
+> ⚠️ 第三方 CDN 通常靠 `Host` 头识别站点。若加速不生效返回错误页，检查 CDN 后台要求的访问 Host 是否就是 `ACCEL_DOMAIN`；如果 CDN 要求保留业务域名 Host，则不适用本模式。
+> ⚠️ 若加速域名直连报 `526 Invalid SSL certificate`，说明该域名没有为「直接 HTTPS 访问」提供合法证书。可尝试将 `ACCEL_USE_HTTPS` 设为 `false` 走 HTTP；若加速域名强制跳转 HTTPS 或靠 CNAME 自定义域名识别站点，则改协议无效，需保留中转域名（可用主域名下的一条 CNAME 子记录，无需另购域名）。
+
+## 让特定子域名不走本 Worker（走 Cloudflare Pages 等）
+
+通配符路由 `*.你的域名/*` 会拦截**所有**子域名。如果某个子域名（例如 `blog`）需要交给 Cloudflare Pages / 其他服务，而**不进入本 Worker**，不能用代码解决（Worker 无法把请求退回给 Cloudflare，且转发回自身会造成死循环）——必须在**路由层排除**。
+
+Cloudflare 路由规则「越精确越优先」，新增一条更精确、且**不绑定任何 Worker** 的路由即可排除：
+
+```
+blog.你的域名/*   ->  <无 Worker>       ← 更精确，请求走正常解析（Pages）
+*.你的域名/*      ->  speedup（本 Worker） ← 通配符，兜底其余子域名
+```
+
+**操作步骤（纯面板，不改代码）：**
+
+1. Cloudflare Dashboard → 进入**域名所在的 Zone**（域名管理页，不是 Worker 页面）
+2. 左侧 **Workers Routes / Workers 路由**
+3. **Add route / 添加路由**：
+   - Route（路由）：`blog.你的域名/*`
+   - Worker：选 **None / 无**（关键：不绑定任何 Worker）
+4. 保存
+
+保存后 `blog.你的域名` 跳过本 Worker，直接由 Cloudflare 解析到 Pages 项目；其余子域名仍照常走 Worker。
+
+> 新版面板入口可能在 Worker 的 **Settings → Domains & Routes**，但这条「不绑 Worker」的排除路由必须在 **Zone 的 Workers Routes** 里添加。
 
 ## 故障排除
 
 - **子域名映射不生效**: 确保环境变量名与子域名完全匹配(区分大小写)
-- **加速/旁路不生效**: 确认子域名已加入对应列表，且 `ACCEL_DOMAIN` 已设置；注意同一子域名若同时出现在两个列表，旁路优先
+- **加速不生效**: 确认子域名已加入 `ACCEL_SUBDOMAINS`，且 `ACCEL_DOMAIN` 已设置；检查 CDN 要求的访问 Host 是否为 `ACCEL_DOMAIN`
+- **面板改的变量部署后被覆盖**: `wrangler deploy` 会用 `wrangler.toml` 的 `[vars]` 覆盖面板明文变量。要么把值写进 `wrangler.toml`，要么只用面板管理并通过面板部署，二者不要混用
