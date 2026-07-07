@@ -6,7 +6,9 @@
 
 - 自动代理子域名请求到指定目标服务器
 - 通过环境变量轻松配置映射关系
-- 自动替换响应内容中的域名引用
+- 支持 WebSocket 代理与可选的 CORS 跨域
+- 加速模式：特定子域名直接转发到第三方 CDN 加速域名（省掉中转域名）
+- 旁路模式：特定子域名纯透传，不改写任何请求头
 
 ## 快速配置
 
@@ -25,6 +27,11 @@
 例如:
 - 变量名: `blog` → 变量值: `aaa.blog.com`
 - 变量名: `api` → 变量值: `api-server.example.org`
+
+3. **加速与旁路（可选）**
+   - `ACCEL_DOMAIN` = 第三方 CDN 加速接入域名（如: `xxx.cdn-provider.com`）
+   - `ACCEL_SUBDOMAINS` = 走加速的子域名列表，逗号分隔（如: `cdn,static`）
+   - `BYPASS_SUBDOMAINS` = 纯透传的子域名列表，逗号分隔（如: `raw,direct`）
 
 ### 部署步骤
 
@@ -56,7 +63,16 @@
 - `www.yourdomain.com` → 代理到 `www.example.com`
 - `api.yourdomain.com` → 代理到 `api.example.com`
 
+## 加速与旁路模式
+
+三个可选变量决定子域名的处理方式，**优先级：旁路 > 加速 > 普通映射**：
+
+- **加速模式**：命中 `ACCEL_SUBDOMAINS` 的子域名会直接转发到 `ACCEL_DOMAIN`，并把 `Host`/`Origin`/`Referer` 改写为加速域名。适合「一个入口域名直连第三方 CDN，无需再单独购买中转域名」的场景。
+  - 例：`ACCEL_DOMAIN=xxx.cdn.com`、`ACCEL_SUBDOMAINS=cdn` → `cdn.yourdomain.com/*` 全部转发到 `xxx.cdn.com`
+- **旁路模式**：命中 `BYPASS_SUBDOMAINS` 的子域名**纯透传**，不改写任何请求头、不处理重定向/Cookie/CORS，原样转发。用于需要保持原始请求头的场景。
+- 三个变量均留空时，行为与普通子域名映射完全一致。
+
 ## 故障排除
 
 - **子域名映射不生效**: 确保环境变量名与子域名完全匹配(区分大小写)
-- **内容替换问题**: 检查内容类型是否包含在配置的替换列表中 
+- **加速/旁路不生效**: 确认子域名已加入对应列表，且 `ACCEL_DOMAIN` 已设置；注意同一子域名若同时出现在两个列表，旁路优先

@@ -11,6 +11,15 @@ const DEFAULT_CONFIG = {
   // 是否启用CORS支持（跨域请求）
   ENABLE_CORS: false,
 
+  // 加速接入域名（第三方CDN加速域名，替代原来的中转域名B）
+  ACCEL_DOMAIN: '',
+
+  // 走加速的子域名列表（逗号分隔），命中则直接转发到 ACCEL_DOMAIN
+  ACCEL_SUBDOMAINS: [],
+
+  // 纯透传的子域名列表（逗号分隔），命中则不改写任何头、原样转发
+  BYPASS_SUBDOMAINS: [],
+
   // 错误消息
   ERROR_MESSAGES: {
     INVALID_SUBDOMAIN: '无效的子域名',
@@ -22,7 +31,7 @@ const DEFAULT_CONFIG = {
 // 注意：此处使用函数是为了确保在每次请求时都能获取最新的环境变量
 function getConfig() {
   const config = { ...DEFAULT_CONFIG };
-  
+
   // 如果环境变量中有设置目标域名，则使用环境变量的值
   if (typeof TARGET_DOMAIN !== 'undefined') {
     config.TARGET_DOMAIN = TARGET_DOMAIN;
@@ -39,7 +48,32 @@ function getConfig() {
     config.ENABLE_CORS = ENABLE_CORS === "false" ? false : Boolean(ENABLE_CORS);
   }
 
+  // 加速接入域名
+  if (typeof ACCEL_DOMAIN !== 'undefined') {
+    config.ACCEL_DOMAIN = ACCEL_DOMAIN;
+  }
+
+  // 走加速的子域名列表（逗号分隔字符串 → 去空白数组）
+  if (typeof ACCEL_SUBDOMAINS !== 'undefined') {
+    config.ACCEL_SUBDOMAINS = parseList(ACCEL_SUBDOMAINS);
+  }
+
+  // 纯透传的子域名列表（逗号分隔字符串 → 去空白数组）
+  if (typeof BYPASS_SUBDOMAINS !== 'undefined') {
+    config.BYPASS_SUBDOMAINS = parseList(BYPASS_SUBDOMAINS);
+  }
+
   return config;
+}
+
+/**
+ * 将逗号分隔的字符串解析为去除空白的非空数组
+ * @param {string} str - 逗号分隔的字符串
+ * @returns {string[]} - 解析后的数组
+ */
+function parseList(str) {
+  if (typeof str !== 'string') return [];
+  return str.split(',').map(s => s.trim()).filter(s => s.length > 0);
 }
 
 // 监听所有请求
@@ -92,14 +126,32 @@ async function handleRequest(request) {
     return new Response(CONFIG.ERROR_MESSAGES.INVALID_SUBDOMAIN, { status: 400 });
   }
   // 尝试获取此子域名的目标域名映射
-  let targetDomain = getTargetForSubdomain(subdomain);
-  // 如果没有找到映射，则使用默认目标域名
-  if (!targetDomain) {
-    targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
+  // 判断该子域名是否命中旁路白名单（优先级最高）
+  const isBypass = CONFIG.BYPASS_SUBDOMAINS.includes(subdomain);
+  let targetDomain;
+  if (!isBypass && CONFIG.ACCEL_DOMAIN && CONFIG.ACCEL_SUBDOMAINS.includes(subdomain)) {
+    // 加速：直接转发到加速接入域名
+    targetDomain = CONFIG.ACCEL_DOMAIN;
+  } else {
+    // 旧逻辑：查子域名映射，未找到则回退到默认目标域名
+    targetDomain = getTargetForSubdomain(subdomain);
+    if (!targetDomain) {
+      targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
+    }
   }
   // 构建目标URL
   const protocol = CONFIG.USE_HTTPS ? 'https' : 'http';
   const targetUrl = `${protocol}://${targetDomain}${pathname}${url.search}`;
+
+  // 旁路透传：命中旁路白名单的子域名，不改写任何头，原样转发并直接返回
+  if (isBypass) {
+    return fetch(new Request(targetUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      redirect: 'manual'
+    }));
+  }
 
   // 修正 Origin 头为目标域名和协议
   const requestHeaders = new Headers(request.headers);
