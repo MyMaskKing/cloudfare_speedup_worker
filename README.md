@@ -18,13 +18,18 @@
    - `TARGET_DOMAIN` = 默认目标域名（如: `example.com`）
    - `USE_HTTPS` = 是否使用HTTPS协议（`true`/`false`）
 
-2. **子域名映射**
-   - 直接使用子域名作为变量名
-   - 变量值为完整的目标服务器地址
+2. **子域名映射（两种写法，可共存）**
 
-例如:
-- 变量名: `blog` → 变量值: `aaa.blog.com`
-- 变量名: `api` → 变量值: `api-server.example.org`
+   **① 集中映射表 `SUBDOMAIN_MAP`（推荐，支持一键导入导出）**
+   - 值为 JSON 字符串：`{"子域名":"目标地址", ...}`
+   - 例：`{"blog":"www.myblog.com","api":"api-server.example.org"}`
+   - 新增/删除站点只改这一个变量；整份配置就是这段 JSON，**复制粘贴即完成导入导出**
+
+   **② 单变量写法（旧，仍兼容）**
+   - 直接用子域名作为变量名，变量值为完整目标地址
+   - 例：变量名 `blog` → 值 `aaa.blog.com`
+
+   > 查找优先级：`SUBDOMAIN_MAP` > 单变量 > 默认规则 `{子域名}.{TARGET_DOMAIN}`
 
 ### 部署步骤
 

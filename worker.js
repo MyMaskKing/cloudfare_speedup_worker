@@ -11,6 +11,11 @@ const DEFAULT_CONFIG = {
   // 是否启用CORS支持（跨域请求）
   ENABLE_CORS: false,
 
+  // 子域名映射表（集中配置，便于批量导入导出）
+  // 形如 { "blog": "www.myblog.com", "api": "api.example.org" }
+  // 优先级高于单变量写法（self[subdomain]）
+  SUBDOMAIN_MAP: {},
+
   // 错误消息
   ERROR_MESSAGES: {
     INVALID_SUBDOMAIN: '无效的子域名',
@@ -39,7 +44,29 @@ function getConfig() {
     config.ENABLE_CORS = ENABLE_CORS === "false" ? false : Boolean(ENABLE_CORS);
   }
 
+  // 子域名映射表（JSON 字符串 → 对象），用于集中配置和导入导出
+  if (typeof SUBDOMAIN_MAP !== 'undefined') {
+    config.SUBDOMAIN_MAP = parseJsonMap(SUBDOMAIN_MAP);
+  }
+
   return config;
+}
+
+/**
+ * 将 JSON 字符串安全解析为「子域名 → 目标地址」映射对象
+ * 解析失败或结果不是普通对象时返回空对象，保证不影响请求处理
+ * @param {string} str - JSON 字符串
+ * @returns {Object<string,string>} - 映射对象
+ */
+function parseJsonMap(str) {
+  if (typeof str !== 'string') return {};
+  try {
+    const obj = JSON.parse(str);
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      return obj;
+    }
+  } catch {}
+  return {};
 }
 
 // 监听所有请求
@@ -49,11 +76,17 @@ addEventListener('fetch', event => {
 
 /**
  * 获取子域名映射的目标域名
+ * 优先查集中映射表 SUBDOMAIN_MAP，未命中回退到旧的单变量写法 self[subdomain]
  * @param {string} subdomain - 子域名前缀
+ * @param {Object} config - 当前配置（含 SUBDOMAIN_MAP）
  * @returns {string|null} - 目标域名，如果不存在则返回null
  */
-function getTargetForSubdomain(subdomain) {
-  // 直接从环境变量中查找对应的子域名映射
+function getTargetForSubdomain(subdomain, config) {
+  // 优先：集中映射表
+  if (config.SUBDOMAIN_MAP && typeof config.SUBDOMAIN_MAP[subdomain] === 'string') {
+    return config.SUBDOMAIN_MAP[subdomain];
+  }
+  // 回退：旧的单变量写法（环境变量名 = 子域名）
   // 例如: blog子域名可以通过名为"blog"的环境变量获取目标域名
   return typeof self[subdomain] !== 'undefined' ? self[subdomain] : null;
 }
@@ -92,7 +125,7 @@ async function handleRequest(request) {
     return new Response(CONFIG.ERROR_MESSAGES.INVALID_SUBDOMAIN, { status: 400 });
   }
   // 尝试获取此子域名的目标域名映射
-  let targetDomain = getTargetForSubdomain(subdomain);
+  let targetDomain = getTargetForSubdomain(subdomain, CONFIG);
   if (!targetDomain) {
     targetDomain = `${subdomain}.${CONFIG.TARGET_DOMAIN}`;
   }

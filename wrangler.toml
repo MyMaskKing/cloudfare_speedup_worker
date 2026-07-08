@@ -6,5 +6,13 @@ compatibility_date = "2024-01-01"
 # 在这里设置您的环境变量
 TARGET_DOMAIN = "mymaskking.dpdns.org"
 USE_HTTPS = "true"
-www = "hexo-blog.mymaskking.dpdns.org"
-n8n = "mask139-n8n.hf.space"
+
+# === 子域名映射（集中配置，推荐）===
+# JSON: { "子域名": "真实目标地址" }。改一处即可批量增删，复制这段 JSON 即完成导入导出。
+# 优先级高于下面的单变量写法；两种可共存。
+SUBDOMAIN_MAP = '{"www":"hexo-blog.mymaskking.dpdns.org","n8n":"mask139-n8n.hf.space"}'
+
+# === 单变量写法（旧，仍兼容）===
+# 变量名 = 子域名，值 = 目标地址；SUBDOMAIN_MAP 未命中时回退到这里
+# www = "hexo-blog.mymaskking.dpdns.org"
+# n8n = "mask139-n8n.hf.space"
